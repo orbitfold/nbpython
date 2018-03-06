@@ -1,4 +1,5 @@
 import numpy as np
+cimport numpy as np
 import pandas as pd
 from sqlalchemy import create_engine
 import itertools
@@ -8,10 +9,7 @@ import weave
 import functools
 
 
-CACHE = {}
-
-
-def entropy(s, start, end):
+def entropy(np.ndarray[np.int_t, ndim=1] s, np.int_t start, np.int_t end):
     """Calculate entropy of a numpy array s starting from start and ending with end (index).
 
     Parameters
@@ -28,16 +26,21 @@ def entropy(s, start, end):
     float
         entropy with base 2
     """
-    try:
-        return CACHE[(start, end)]
-    except KeyError:
-        s_ = s[start:end]
-        cs = np.unique(s_)
-        n = float(end - start)
-        result = -sum([(nc / n) * np.log2(nc / n) for nc in
-                       [float(np.where(s_ == c)[0].size) for c in cs]])
-        CACHE[(start, end)] = result
-        return result
+    cdef np.ndarray[np.int_t, ndim=1] s_ = s[start:end]
+    cdef np.ndarray[np.int_t, ndim=1] cs = np.unique(s_)
+    cdef np.int_t n_cs = cs.size
+    cdef np.int_t n = end - start
+    cdef double result = 0.0
+    cdef int i, j
+    cdef double nc
+    for i in range(0, n_cs):
+        nc = 0.0
+        for j in range(0, n):
+            if s_[j] == cs[i]:
+                nc += 1.0
+        result += (nc / n) * np.log2(nc / n)
+    result = -result
+    return result
 
     
 def class_information_entropy(s, start, end, cut):
@@ -66,7 +69,7 @@ def class_information_entropy(s, start, end, cut):
             (n_s2 / n) * entropy(s, cut, end))
 
 
-def find_best_cut(s, start, end):
+def find_best_cut(np.ndarray[np.int_t, ndim=1] s, np.int_t start, np.int_t end):
     """Find a cut point in the string s[start:end] that results in lowest sum entropy after
     dividing according to that cut point.
 
@@ -86,9 +89,11 @@ def find_best_cut(s, start, end):
     """
     if end - start <= 1:
         return -1
-    best_ent = class_information_entropy(s, start, end, start + 1)
-    best_cut = start + 1
-    current_c = s[start]
+    cdef double best_ent = class_information_entropy(s, start, end, start + 1)
+    cdef np.int_t best_cut = start + 1
+    cdef np.int_t current_c = s[start]
+    cdef double ent
+    cdef int i
     for i in range(start + 1, end - 1):
         # Since best cuts are always at class boundaries we can ignore strings of the same class.
         if s[i] == current_c:
@@ -217,7 +222,6 @@ def cutup(s, start, end):
     list of int
         list of cut-points
     """
-    print('cutup(s, {}, {})'.format(start, end))
     c = find_best_cut(s, start, end)
     if c < 0:
         return []
@@ -273,7 +277,7 @@ def bins(attr, classes):
 
 def get_data():
     engine = create_engine('mysql+mysqldb://nagios:vince noir@localhost/qprediction')
-    query = 'select nodes_requested, if(time_spent_queued < 3600, 0, 1) as time_spent_queued from jobs where class=\"mpp2_batch\" and site=\"lrz_lx_mpp2\"'
+    query = 'select nodes_requested, if(time_spent_queued < 3600, 0, 1) as time_spent_queued from jobs where class=\"general\" and site=\"lrz_smuc\"'
     df = pd.read_sql(query, engine).sort_values(['nodes_requested'])
     return df
 
