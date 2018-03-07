@@ -71,6 +71,19 @@ class NBModel:
             self.evaluated.append(score)
         self.callibration_bins = efbin([x[0] for x in self.evaluated])
         self.callibrated_probs = [0.0 for _ in self.callibration_bins]
+        for index, callibration_bin in enumerate(self.callibration_bins):
+            n = 0.0
+            c = 0.0
+            for record in self.evaluated:
+                print record
+                print callibration_bin
+                print
+                if record[0] > callibration_bin[0] and record[0] <= callibration_bin[1]:
+                    n += 1.0
+                    if record['c'] == 0:
+                        c += 1.0
+            if n != 0:
+                self.callibrated_probs[index] = c / n
         
         
     def __str__(self):
@@ -105,7 +118,20 @@ class NBModel:
             result[c] = result[c] / summed
         return result
 
+    
+    def evaluate_callibrated(self, x):
+        result = self.evaluate(x)
+        for index, callibration_bin in enumerate(self.callibration_bins):
+            if (result[0] > callibration_bin[0] and
+                result[0] <= callibration_bin[1]):
+                return {0 : self.callibrated_probs[index],
+                        1 : 1.0 - self.callibrated_probs[index]}
+
         
     def classify(self, x):
         y = self.evaluate(x)
+        return max(y.iteritems(), key=operator.itemgetter(1))[0]
+
+    def classify_callibrated(self, x):
+        y = self.evaluate_callibrated(x)
         return max(y.iteritems(), key=operator.itemgetter(1))[0]
